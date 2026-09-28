@@ -1,0 +1,821 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>OpenVPN Access Server</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+:root{--side:#1e3a5f;--side2:#172e4c;--orange:#e67e22;--blue:#3498db;--line:#dde3ea;
+--muted:#5b6c80;--text:#333;--row:#f2f3f4;--bg:#f8fafc;--green:#1e8e5a;--red:#c0392b;}
+body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",Helvetica,Arial,sans-serif;color:var(--text);font-size:14px;background:var(--bg);}
+a{color:var(--blue);text-decoration:none;}
+
+/* 登录页 */
+#loginView{position:fixed;inset:0;background:#0f2038;display:none;align-items:center;justify-content:center;z-index:999;}
+#loginView.show{display:flex;}
+.login-box{background:#fff;border-radius:12px;padding:34px 38px;width:380px;box-shadow:0 20px 60px rgba(0,0,0,.4);}
+.login-box .logo-row{display:flex;align-items:center;gap:10px;margin-bottom:18px;}
+.login-box h2{font-size:18px;color:var(--side);}
+.login-box .sub{font-size:12px;color:var(--muted);margin-bottom:20px;}
+.login-box label{font-size:12px;color:#5b6c80;font-weight:600;display:block;margin:12px 0 4px;}
+.login-box input{width:100%;padding:9px 12px;border:1px solid var(--line);border-radius:6px;font-size:14px;}
+.login-box .err{color:var(--red);font-size:12px;min-height:16px;margin-top:8px;}
+.login-box button{width:100%;margin-top:16px;padding:10px;background:var(--orange);color:#fff;border:0;border-radius:6px;font-size:14px;cursor:pointer;font-weight:600;}
+.login-box button:hover{background:#d35400;}
+
+/* 整体布局 */
+#app{display:flex;min-height:100vh;}
+#sidebar{width:222px;background:var(--side);color:#d6e2f2;flex-shrink:0;padding:16px 0 40px;position:sticky;top:0;height:100vh;overflow-y:auto;}
+#sidebar .brand{display:flex;align-items:center;gap:9px;padding:4px 18px 18px;border-bottom:1px solid rgba(255,255,255,.12);margin-bottom:10px;}
+.logo{width:30px;height:30px;border-radius:8px;background:var(--orange);display:flex;align-items:center;justify-content:center;font-size:15px;color:#fff;font-weight:800;}
+#sidebar .brand b{color:#fff;font-size:14px;letter-spacing:.5px;}
+#sidebar .grp{font-size:10.5px;letter-spacing:1px;color:#8aa5c6;padding:10px 18px 5px;font-weight:700;}
+#sidebar .item{display:flex;align-items:center;gap:8px;padding:7px 18px;color:#cfdcf0;cursor:pointer;font-size:13px;border-left:3px solid transparent;}
+#sidebar .item:hover{background:rgba(255,255,255,.07);}
+#sidebar .item.active{background:rgba(255,255,255,.12);border-left-color:var(--orange);color:#fff;font-weight:600;}
+#sidebar .item .ic{opacity:.75;font-size:12px;width:16px;text-align:center;}
+#sidebar .foot{position:sticky;bottom:0;padding:12px 18px;font-size:12px;color:#8aa5c6;background:var(--side);}
+
+#main{flex:1;padding:24px 30px;min-width:0;}
+#pageTitle{color:var(--blue);font-size:24px;font-weight:700;margin-bottom:2px;}
+#pageSub{color:var(--muted);font-size:13px;margin-bottom:16px;}
+.topbar2{display:flex;align-items:center;gap:10px;margin-bottom:18px;}
+.topbar2 .grow{flex:1;}
+.btn{border:1px solid var(--line);background:#fff;border-radius:6px;padding:6px 13px;font-size:13px;cursor:pointer;color:var(--text);}
+.btn:hover{background:#f2f6fa;}
+.btn.primary{background:var(--orange);border-color:var(--orange);color:#fff;font-weight:600;}
+.btn.primary:hover{background:#d35400;}
+.btn.danger{color:var(--red);border-color:#e5b8b3;}
+.btn.small{padding:3px 9px;font-size:12px;}
+.btn-ghost{background:transparent;border:0;color:#8aa5c6;cursor:pointer;font-size:12px;}
+.btn-ghost:hover{color:var(--blue);}
+
+.card{background:#fff;border:1px solid var(--line);border-radius:10px;padding:20px 22px;margin-bottom:18px;}
+.card h3{font-size:15px;font-weight:700;color:var(--side);margin-bottom:12px;display:flex;align-items:center;gap:8px;}
+.card h3 .bar{width:4px;height:16px;background:var(--orange);border-radius:2px;display:inline-block;}
+.msg{font-size:13px;padding:8px 12px;border-radius:6px;margin-bottom:12px;display:none;}
+.msg.ok{background:#e8f7ef;color:var(--green);display:block;}
+.msg.err{background:#fdecea;color:var(--red);display:block;}
+
+table.tbl{width:100%;border-collapse:collapse;font-size:13px;}
+table.tbl th{text-align:left;padding:9px 12px;color:#5b6c80;font-weight:700;font-size:12px;border-bottom:2px solid var(--line);background:#fff;}
+table.tbl td{padding:9px 12px;border-bottom:1px solid #edf0f4;}
+table.tbl tr:nth-child(even) td{background:var(--row);}
+.mono{font-family:Menlo,Consolas,monospace;font-size:12px;color:#24364c;}
+.kv{font-size:13px;width:100%;}
+.kv .r{display:flex;border-bottom:1px solid #edf0f4;}
+.kv .r:nth-child(even){background:var(--row);}
+.kv .r b{width:240px;padding:9px 12px;color:var(--muted);font-weight:600;flex-shrink:0;}
+.kv .r span{padding:9px 12px;}
+.kv .r span.hl{color:var(--orange);font-weight:800;font-size:16px;}
+.kv .r span.green{color:var(--green);font-weight:600;}
+.kv .r span.red{color:var(--red);font-weight:600;}
+.kv .r span.gray{color:var(--muted);}
+
+input[type=text],input[type=password],select,textarea{padding:8px 11px;border:1px solid var(--line);border-radius:6px;font-size:13px;background:#fff;}
+input:focus,select:focus,textarea:focus{outline:2px solid #cfe6f7;border-color:var(--blue);}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px;}
+.lbl{min-width:110px;color:var(--muted);font-weight:600;font-size:13px;}
+.hint{color:var(--muted);font-size:12px;line-height:1.5;flex-basis:100%;}
+.radio{display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer;margin-right:14px;}
+.switch{position:relative;display:inline-block;width:36px;height:20px;}
+.switch input{opacity:0;width:0;height:0;}
+.sl{position:absolute;inset:0;background:#c3ccd6;border-radius:20px;transition:.2s;cursor:pointer;}
+.sl:before{content:"";position:absolute;width:14px;height:14px;left:3px;top:3px;background:#fff;border-radius:50%;transition:.2s;}
+.switch input:checked + .sl{background:var(--green);}
+.switch input:checked + .sl:before{transform:translateX(16px);}
+code{background:#eef2f6;padding:1px 5px;border-radius:4px;font-size:12px;}
+pre.log{font-family:Menlo,Consolas,monospace;font-size:11.5px;background:#0f2038;color:#b8d0ea;padding:14px;border-radius:8px;white-space:pre-wrap;word-break:break-all;max-height:480px;overflow-y:auto;line-height:1.5;}
+.banner{background:#d6eaf8;color:#1f5b8f;padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:16px;display:flex;gap:10px;align-items:center;}
+.banner .x{margin-left:auto;cursor:pointer;font-weight:700;}
+.badge{display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:600;}
+.badge.green{background:#e8f7ef;color:var(--green);}
+.badge.red{background:#fdecea;color:var(--red);}
+.badge.gray{background:#eef1f5;color:#5b6c80;}
+.empty{color:var(--muted);padding:20px;text-align:center;font-size:13px;}
+canvas#monCanvas{width:100%;height:260px;border:1px solid var(--line);border-radius:8px;background:#fff;}
+</style>
+</head>
+<body>
+
+<div id="loginView" class="show">
+  <div class="login-box">
+    <div class="logo-row"><div class="logo">OV</div><h2>OpenVPN Access Server</h2></div>
+    <div class="sub" id="loginSub">管理后台登录 · Sign in to the admin UI</div>
+    <label id="lbUser">用户名 / Username</label>
+    <input type="text" id="lgUser" value="admin">
+    <label id="lbPass">密码 / Password</label>
+    <input type="password" id="lgPass">
+    <div class="err" id="lgErr"></div>
+    <button id="lgBtn">登录 / Sign In</button>
+  </div>
+</div>
+
+<div id="app">
+  <div id="sidebar">
+    <div class="brand"><div class="logo">OV</div><b>OPENVPN<br>Access Server</b></div>
+    <div id="menu"></div>
+    <div class="foot" id="sideFoot"></div>
+  </div>
+  <div id="main">
+    <div class="topbar2">
+      <div>
+        <div id="pageTitle">Status Overview</div>
+        <div id="pageSub"></div>
+      </div>
+      <div class="grow"></div>
+      <button class="btn" id="langBtn">中文 / English</button>
+      <button class="btn" id="outBtn">Logout</button>
+    </div>
+    <div class="banner" id="banner" style="display:none"><span>🛈</span><span id="bannerTxt"></span><span class="x" onclick="this.parentNode.style.display='none'">×</span></div>
+    <div id="content"></div>
+  </div>
+</div>
+
+<script>
+/* ===== i18n ===== */
+var zh = {
+ 'nav.overview':'状态概览','nav.online':'当前用户','nav.logs':'日志报告',
+ 'nav.network':'网络设置','nav.vpn':'VPN设置','nav.webadmin':'网页管理','nav.servers':'服务服务器','nav.backup':'配置备份',
+ 'nav.accounts':'用户账户','nav.groups':'组权限',
+ 'nav.auth':'认证设置','nav.export':'客户端导出','nav.clientset':'客户端设置','nav.certs':'证书管理','nav.debug':'调试','nav.monitor':'资源使用',
+ 'nav.doc':'文档','nav.support':'支持',
+ 'grp.status':'STATUS 状态','grp.config':'CONFIGURATION 配置','grp.user':'USER MANAGEMENT 用户管理',
+ 'grp.auth':'AUTHENTICATION 身份验证','grp.tools':'TOOLS 工具','grp.doc':'DOCUMENTATION 文档','grp.sup':'SUPPORT 支持',
+ 'sub.overview':'服务器总览 · Server Overview','sub.online':'在线用户列表 · Current Users','sub.logs':'系统日志 · System Logs',
+ 'sub.network':'网络参数配置 · Network Settings','sub.vpn':'VPN 行为配置 · VPN Settings','sub.webadmin':'管理界面设置 · Web Admin','sub.servers':'多服务实例 · Service Servers','sub.backup':'配置备份与恢复 · Backup',
+ 'sub.accounts':'用户账户管理 · User Accounts','sub.groups':'用户组与权限 · Group Permissions',
+ 'sub.auth':'认证方式配置 · Authentication','sub.export':'客户端配置导出 · Client Export','sub.clientset':'客户端默认配置 · Client Settings','sub.certs':'证书管理 · Certificates','sub.debug':'调试工具 · Debugging','sub.monitor':'资源实时监控 · Resource Usage',
+ 'sub.doc':'使用帮助 · Documentation','sub.support':'技术支持 · Support',
+ 'ov.servername':'服务器名称','ov.version':'版本','ov.allowed':'允许的VPN连接数','ov.active':'当前活跃用户',
+ 'ov.auth':'用户身份验证方式','ov.listen':'监听IP/端口','ov.osi':'OSI层模式','ov.vpn':'VPN 服务状态',
+ 'ov.on':'开启','ov.off':'已停止','btn.start':'启动 VPN','btn.stop':'停止 VPN','btn.restart':'重启 VPN',
+ 'on.user':'用户名','on.real':'真实地址','on.virtual':'分配的IP','on.since':'连接时长','on.in':'下行流量','on.out':'上行流量','on.kick':'断开',
+ 'log.filter':'按关键字/用户过滤','log.refresh':'刷新','log.n':'最近 {n} 行',
+ 'net.hostname':'服务器地址','net.hostHint':'客户端配置文件 remote 填的地址（域名或 IP）',
+ 'net.iface':'监听接口','net.allIface':'所有接口','net.proto':'传输协议','net.both':'Both（双开）',
+ 'net.port':'监听端口','net.daemons':'多守护进程','net.cpuHint':'CPU 核数 {n}','net.dns':'DNS 服务器',
+ 'net.instances':'运行中的实例','net.save':'保存设置','net.saved':'服务器配置已保存并重启，请重新下载客户端配置',
+ 'vpn.cipher':'加密算法','vpn.auth':'认证算法','vpn.redirect':'重定向所有客户端流量','vpn.mode':'隧道模式','vpn.ctrl':'客户端访问控制',
+ 'wa.title':'管理员密码修改','wa.user':'用户名','wa.newpass':'新密码','wa.save':'修改密码','wa.ok':'密码已修改，下次登录用新密码',
+ 'srv.add':'添加实例','srv.port':'端口','srv.subnet':'子网（如 10.9.0.0 255.255.255.0）','srv.remove':'移除','srv.addbtn':'添加服务实例',
+ 'bk.title':'配置备份','bk.export':'导出备份','bk.exportSub':'打包 server 配置 + ccd 路由 + 面板数据（用户/设置），下载 tar.gz','bk.restore':'恢复说明：将备份上传到服务器 /opt/ovpn-admin/ 后在此恢复（开发中，推荐先导出保存）',
+ 'ac.add':'添加用户','ac.name':'用户名','ac.group':'权限组','ac.op':'操作','ac.status':'状态','ac.expiry':'证书有效期',
+ 'ac.online':'在线','ac.dl':'下载配置','ac.set':'设置','ac.disable':'禁用','ac.enable':'启用','ac.delete':'删除','ac.confirmD':'确定删除 {name}？不可恢复！','ac.confirmX':'确定禁用 {name}？',
+ 'gp.name':'组名','gp.desc':'描述','gp.networks':'允许访问的网络（CIDR，逗号分隔）','gp.bw':'带宽限制','gp.save':'保存组','gp.del':'删除组','gp.note':'组用户的客户端配置会自动加入组网络路由',
+ 'au.method':'认证方式','au.local':'本地 (Local)','au.pam':'系统 PAM','au.radius':'RADIUS','au.ldap':'LDAP/AD','au.saml':'SAML SSO',
+ 'au.rh':'RADIUS 服务器','au.rs':'共享密钥','au.rp':'端口','au.lh':'LDAP 服务器','au.lb':'绑定 DN','au.lbase':'搜索基础 DN',
+ 'au.sh':'IdP 元数据地址','au.se':'实体 ID','au.save':'保存认证设置','au.note':'本地/PAM 可用；RADIUS/LDAP/SAML 在此保存配置（对接需对应服务）',
+ 'ex.title':'客户端配置导出','ex.user':'选择用户','ex.dl':'下载 .ovpn','ex.note':'同一配置文件可用于 Windows / Mac / Linux / Android / iOS 的 OpenVPN Connect 导入',
+ 'cs.title':'客户端默认设置','cs.dns':'默认 DNS（在网络设置中配置）','cs.redirect':'默认路由模式（在 VPN 设置中配置）','cs.note':'以上全局默认会写入下载的客户端配置文件',
+ 'ce.title':'证书管理','ce.ca':'CA 证书信息','ce.certs':'客户端证书','ce.name':'证书名','ce.state':'状态','ce.exp':'有效期',
+ 'db.title':'调试工具','db.tail':'实时日志（最近 80 行）','db.services':'服务状态','db.routes':'路由表','db.refresh':'刷新',
+ 'mo.title':'资源实时监控','mo.cpu':'CPU','mo.mem':'内存','mo.conn':'连接数','mo.net':'带宽 KB/s','mo.legend':'点击图例切换：CPU % / 内存 % / 连接数',
+ 'doc.title':'使用帮助','doc.c1':'客户端连接','doc.c1b':'下载 .ovpn 配置文件 → 安装 OpenVPN Connect → 导入配置 → 输入域名/地址即可连接',
+ 'doc.c2':'固定 IP 与路由','doc.c2b':'用户账户 → 设置 → 可指定静态 IP（10.8.0.x）和允许访问的内网网段（如 192.168.0.0/24）',
+ 'doc.c3':'多实例与协议','doc.c3b':'网络设置可切换 UDP/TCP/Both、改端口、开多守护进程；Both 时自动补 TCP 443 实例',
+ 'doc.c4':'备份','doc.c4b':'配置备份页可导出全部配置，重装后可恢复',
+ 'sup.title':'技术支持','sup.ver':'版本','sup.license':'授权','sup.contact':'联系方式',
+ 'lang':'English','logout':'退出','err.login':'用户名或密码错误','login.user':'用户名 / Username','login.pass':'密码 / Password','login.btn':'登录 / Sign In',
+ 'msg.err':'操作失败: ','msg.ok':'成功','admin':'管理员','user':'用户','active':'有效','denied':'已禁用','now':'在线','st.run':'运行中','st.stop':'已停止',
+ 'refresh':'刷新','save':'保存','cancel':'取消','del':'删除','all':'全部'
+};
+var en = {
+ 'nav.overview':'Status Overview','nav.online':'Current Users','nav.logs':'Log Reports',
+ 'nav.network':'Network Settings','nav.vpn':'VPN Settings','nav.webadmin':'Web Admin','nav.servers':'Service Servers','nav.backup':'Configuration Backup',
+ 'nav.accounts':'User Accounts','nav.groups':'Group Permissions',
+ 'nav.auth':'General','nav.export':'Client Export','nav.clientset':'Client Settings','nav.certs':'Certificate Management','nav.debug':'Debugging','nav.monitor':'Resource Usage',
+ 'nav.doc':'Documentation','nav.support':'Support',
+ 'grp.status':'STATUS','grp.config':'CONFIGURATION','grp.user':'USER MANAGEMENT',
+ 'grp.auth':'AUTHENTICATION','grp.tools':'TOOLS','grp.doc':'DOCUMENTATION','grp.sup':'SUPPORT',
+ 'sub.overview':'Server overview','sub.online':'Connected users','sub.logs':'System logs',
+ 'sub.network':'Network settings','sub.vpn':'VPN behavior','sub.webadmin':'Admin interface','sub.servers':'Service instances','sub.backup':'Backup & restore',
+ 'sub.accounts':'User accounts','sub.groups':'Group permissions',
+ 'sub.auth':'Authentication','sub.export':'Client export','sub.clientset':'Client defaults','sub.certs':'Certificates','sub.debug':'Debugging','sub.monitor':'Resource usage',
+ 'sub.doc':'Help','sub.support':'Support',
+ 'ov.servername':'Server Name','ov.version':'Version','ov.allowed':'Allowed VPN Connections','ov.active':'Current Active Users',
+ 'ov.auth':'Authenticate users with','ov.listen':'Listening IP / Port','ov.osi':'OSI Layer','ov.vpn':'VPN services status',
+ 'ov.on':'ON','ov.off':'OFF','btn.start':'Start VPN','btn.stop':'Stop VPN','btn.restart':'Restart VPN',
+ 'on.user':'Username','on.real':'Real Address','on.virtual':'Virtual IP','on.since':'Connected since','on.in':'Bytes In','on.out':'Bytes Out','on.kick':'Disconnect',
+ 'log.filter':'Filter by keyword / user','log.refresh':'Refresh','log.n':'Last {n} lines',
+ 'net.hostname':'Hostname or IP','net.hostHint':'Address used as remote in client profiles (domain or IP)',
+ 'net.iface':'Interface','net.allIface':'All interfaces','net.proto':'Protocol','net.both':'Both',
+ 'net.port':'Listen Port','net.daemons':'Multi-daemon','net.cpuHint':'CPU cores {n}','net.dns':'DNS servers',
+ 'net.instances':'Running instances','net.save':'Save Settings','net.saved':'Saved & restarted. Re-download client profile',
+ 'vpn.cipher':'Cipher','vpn.auth':'Auth Digest','vpn.redirect':'Redirect all client traffic','vpn.mode':'Tunnel mode','vpn.ctrl':'Client access control',
+ 'wa.title':'Admin Password','wa.user':'Username','wa.newpass':'New Password','wa.save':'Change Password','wa.ok':'Password changed. Use it on next login',
+ 'srv.add':'Add Instance','srv.port':'Port','srv.subnet':'Subnet (e.g. 10.9.0.0 255.255.255.0)','srv.remove':'Remove','srv.addbtn':'Add Service Instance',
+ 'bk.title':'Configuration Backup','bk.export':'Export Backup','bk.exportSub':'Pack server configs + ccd routes + panel data, download tar.gz','bk.restore':'Restore: upload backup to /opt/ovpn-admin/ (developing; export is recommended now)',
+ 'ac.add':'Add User','ac.name':'Username','ac.group':'Group','ac.op':'Actions','ac.status':'Status','ac.expiry':'Certificate Expiry',
+ 'ac.online':'Online','ac.dl':'Download','ac.set':'Settings','ac.disable':'Disable','ac.enable':'Enable','ac.delete':'Delete','ac.confirmD':'Delete {name}? This cannot be undone!','ac.confirmX':'Disable {name}?',
+ 'gp.name':'Group Name','gp.desc':'Description','gp.networks':'Allowed networks (CIDR, comma-separated)','gp.bw':'Bandwidth','gp.save':'Save Group','gp.del':'Delete Group','gp.note':'Group routes are added to member client profiles automatically',
+ 'au.method':'Auth Method','au.local':'Local','au.pam':'PAM','au.radius':'RADIUS','au.ldap':'LDAP/AD','au.saml':'SAML SSO',
+ 'au.rh':'RADIUS Server','au.rs':'Shared Secret','au.rp':'Port','au.lh':'LDAP Server','au.lb':'Bind DN','au.lbase':'Search Base DN',
+ 'au.sh':'IdP Metadata URL','au.se':'Entity ID','au.save':'Save Auth Settings','au.note':'Local/PAM usable; RADIUS/LDAP/SAML saved here (integration needs the services)',
+ 'ex.title':'Client Export','ex.user':'Select User','ex.dl':'Download .ovpn','ex.note':'Same profile works for Windows / Mac / Linux / Android / iOS via OpenVPN Connect',
+ 'cs.title':'Client Defaults','cs.dns':'Default DNS (configured in Network Settings)','cs.redirect':'Default routing (configured in VPN Settings)','cs.note':'These defaults are written into downloaded profiles',
+ 'ce.title':'Certificate Management','ce.ca':'CA Certificate','ce.certs':'Client Certificates','ce.name':'Name','ce.state':'State','ce.exp':'Expiry',
+ 'db.title':'Debugging','db.tail':'Live log (last 80 lines)','db.services':'Service Status','db.routes':'Routing Table','db.refresh':'Refresh',
+ 'mo.title':'Resource Usage','mo.cpu':'CPU','mo.mem':'Memory','mo.conn':'Connections','mo.net':'Bandwidth KB/s','mo.legend':'Click legend to switch: CPU % / Memory % / Connections',
+ 'doc.title':'Documentation','doc.c1':'Client connection','doc.c1b':'Download .ovpn profile → install OpenVPN Connect → import → connect',
+ 'doc.c2':'Static IP & routing','doc.c2b':'User Accounts → Settings → set static IP (10.8.0.x) and allowed networks (e.g. 192.168.0.0/24)',
+ 'doc.c3':'Instances & protocols','doc.c3b':'Network Settings: UDP/TCP/Both, port, multi-daemon; Both adds TCP 443 automatically',
+ 'doc.c4':'Backup','doc.c4b':'Export all configs in Backup page',
+ 'sup.title':'Support','sup.ver':'Version','sup.license':'License','sup.contact':'Contact',
+ 'lang':'中文','logout':'Logout','err.login':'Wrong username or password','login.user':'Username','login.pass':'Password','login.btn':'Sign In',
+ 'msg.err':'Operation failed: ','msg.ok':'OK','admin':'Admin','user':'User','active':'Active','denied':'Disabled','now':'Online','st.run':'Running','st.stop':'Stopped',
+ 'refresh':'Refresh','save':'Save','cancel':'Cancel','del':'Delete','all':'All'
+};
+var lang = localStorage.getItem('ovpn_lang') || 'zh';
+function T(k){var o = lang==='zh'?zh:en; return o[k] || zh[k] || k;}
+function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function fmtBytes(b){b=+b||0; if(b>=1048576)return (b/1048576).toFixed(1)+' MB'; if(b>=1024)return (b/1024).toFixed(1)+' KB'; return b+' B';}
+function fmtSince(t){if(!t||t==='-')return '-'; var s=Math.max(0,Math.floor(Date.now()/1000 - t)); var d=Math.floor(s/86400),h=Math.floor(s%86400/3600),m=Math.floor(s%3600/60); return (d?d+'d ':'')+(h?h+'h ':'')+m+'m';}
+
+/* ===== 认证 ===== */
+var auth = localStorage.getItem('ovpn_auth') || '';
+function setAuth(p){auth='Basic '+btoa('admin:'+p);localStorage.setItem('ovpn_auth',auth);}
+function api(url,method,body){
+  return fetch(url,{method:method||'GET',headers:{'Authorization':auth,'Content-Type':'application/json'},
+    body:body?JSON.stringify(body):undefined}).then(function(r){
+    if(r.status===401){showLogin();throw new Error('401');}
+    return r.json().catch(function(){return {ok:false};});
+  });
+}
+function showLogin(){
+  if(document.getElementById('loginView').className.indexOf('show')<0){
+    document.getElementById('loginView').className='show';
+  }
+}
+document.getElementById('lgBtn').onclick=function(){
+  var u=document.getElementById('lgUser').value.trim(), p=document.getElementById('lgPass').value;
+  setAuth(p);
+  fetch('/api/overview',{headers:{'Authorization':auth}}).then(function(r){
+    if(r.status===200){document.getElementById('loginView').className='';document.getElementById('lgErr').textContent='';loadApp();}
+    else{document.getElementById('lgErr').textContent=T('err.login');}
+  }).catch(function(){document.getElementById('lgErr').textContent=T('err.login');});
+};
+
+/* ===== 菜单 ===== */
+var MENU=[
+ {g:'grp.status',items:[['overview','nav.overview'],['online','nav.online'],['logs','nav.logs']]},
+ {g:'grp.config',items:[['network','nav.network'],['vpn','nav.vpn'],['webadmin','nav.webadmin'],['servers','nav.servers'],['backup','nav.backup']]},
+ {g:'grp.user',items:[['accounts','nav.accounts'],['groups','nav.groups']]},
+ {g:'grp.auth',items:[['auth','nav.auth']]},
+ {g:'grp.tools',items:[['export','nav.export'],['clientset','nav.clientset'],['certs','nav.certs'],['debug','nav.debug'],['monitor','nav.monitor']]},
+ {g:'grp.doc',items:[['doc','nav.doc']]},
+ {g:'grp.sup',items:[['support','nav.support']]}
+];
+function buildMenu(){
+  var el=document.getElementById('menu');el.innerHTML='';
+  MENU.forEach(function(grp){
+    var d=document.createElement('div');d.className='grp';d.textContent=T(grp.g);el.appendChild(d);
+    grp.items.forEach(function(it){
+      var a=document.createElement('div');a.className='item';a.dataset.page=it[0];
+      a.innerHTML='<span class="ic">▸</span><span>'+T(it[1])+'</span>';
+      a.onclick=function(){switchPage(it[0]);};
+      el.appendChild(a);
+    });
+  });
+}
+function setActive(p){
+  document.querySelectorAll('#sidebar .item').forEach(function(i){i.classList.toggle('active',i.dataset.page===p);});
+}
+
+/* ===== 页面渲染 ===== */
+var curPage='overview';
+function switchPage(p){
+  curPage=p;setActive(p);
+  document.getElementById('pageTitle').textContent=T('nav.'+p);
+  document.getElementById('pageSub').textContent=T('sub.'+p);
+  document.getElementById('content').scrollTop=0;
+  var fn={overview:pageOverview,online:pageOnline,logs:pageLogs,network:pageNetwork,vpn:pageVpn,
+    webadmin:pageWebadmin,servers:pageServers,backup:pageBackup,accounts:pageAccounts,groups:pageGroups,
+    auth:pageAuth,export:pageExport,clientset:pageClientset,certs:pageCerts,debug:pageDebug,monitor:pageMonitor,
+    doc:pageDoc,support:pageSupport}[p];
+  if(fn)fn();
+}
+function showMsg(id,ok,txt){
+  var m=document.getElementById(id);if(!m)return;
+  m.className='msg '+(ok?'ok':'err');m.textContent=txt;m.style.display='block';
+}
+
+/* overview */
+function pageOverview(){
+  var el=document.getElementById('content');
+  el.innerHTML='<div class="card"><div class="row"><button class="btn" id="ovRefresh">'+T('refresh')+'</button><span style="flex:1"></span><button class="btn" id="ovStart" style="display:none">'+T('btn.start')+'</button><button class="btn" id="ovStop">'+T('btn.stop')+'</button><button class="btn" id="ovRestart">'+T('btn.restart')+'</button></div><div class="kv" id="ovKv"></div></div>';
+  document.getElementById('ovRefresh').onclick=pageOverview;
+  document.getElementById('ovStop').onclick=function(){api('/api/vpn/control','POST',{action:'stop'}).then(loadOverview);};
+  document.getElementById('ovRestart').onclick=function(){api('/api/vpn/control','POST',{action:'restart'}).then(loadOverview);};
+  function loadOverview(){
+    api('/api/overview').then(function(d){
+      if(!d||!d.ok)return;var o=d.overview;
+      var rows=[
+        [T('ov.version'),o.version],
+        [T('ov.servername'),o.server_name],
+        [T('ov.allowed'),'<span class="hl">'+o.allowed+'</span>'],
+        [T('ov.active'),'<span class="hl">'+o.active_users+'</span>'],
+        [T('ov.auth'),o.auth_method==='local'?T('au.local'):o.auth_method],
+        [T('ov.listen'),(o.listen_ip==='all interfaces'?T('net.allIface'):o.listen_ip)+' / '+o.proto.toUpperCase()+' '+o.port],
+        [T('ov.osi'),o.osi_layer],
+        [T('ov.vpn'),o.vpn_on?'<span class="green">'+T('ov.on')+'</span>':'<span class="red">'+T('ov.off')+'</span>']
+      ];
+      document.getElementById('ovKv').innerHTML=rows.map(function(r){return '<div class="r"><b>'+r[0]+'</b><span>'+r[1]+'</span></div>';}).join('');
+      document.getElementById('ovStart').style.display=o.vpn_on?'none':'inline-block';
+      document.getElementById('ovStart').onclick=function(){api('/api/vpn/control','POST',{action:'start'}).then(loadOverview);};
+    }).catch(function(){});
+  }
+  loadOverview();
+}
+
+/* online users */
+function pageOnline(){
+  var el=document.getElementById('content');
+  el.innerHTML='<div class="card"><div class="row"><button class="btn" id="olRefresh">'+T('refresh')+'</button><span class="hint">'+T('sub.online')+'</span></div><table class="tbl" id="olTbl"></table><div class="empty" id="olEmpty" style="display:none">'+T('msg.ok')+' 0</div></div>';
+  document.getElementById('olRefresh').onclick=pageOnline;
+  api('/api/online').then(function(d){
+    if(!d||!d.ok)return;
+    var os=Object.keys(d.online);
+    var tb=document.getElementById('olTbl');
+    if(!os.length){tb.innerHTML='';document.getElementById('olEmpty').style.display='block';return;}
+    document.getElementById('olEmpty').style.display='none';
+    tb.innerHTML='<tr><th>'+T('on.user')+'</th><th>'+T('on.real')+'</th><th>'+T('on.virtual')+'</th><th>'+T('on.since')+'</th><th>'+T('on.in')+'</th><th>'+T('on.out')+'</th><th></th></tr>';
+    os.forEach(function(n){
+      var o=d.online[n];
+      tb.innerHTML+='<tr><td>'+esc(n)+'</td><td class="mono">'+esc(o.real)+'</td><td class="mono">'+esc(o.virtual)+'</td><td>'+fmtSince(o.since)+'</td><td>'+fmtBytes(o.bytes_in)+'</td><td>'+fmtBytes(o.bytes_out)+'</td><td><button class="btn small danger" data-k="'+esc(n)+'">'+T('on.kick')+'</button></td></tr>';
+    });
+    tb.querySelectorAll('[data-k]').forEach(function(b){
+      b.onclick=function(){api('/api/online/kick','POST',{name:b.dataset.k}).then(function(r){showMsg('olMsg',!!(r&&r.ok),r&&r.ok?T('msg.ok'):T('msg.err')+(r&&r.error||''));pageOnline();});};
+    });
+  }).catch(function(){});
+}
+
+/* logs */
+function pageLogs(){
+  var el=document.getElementById('content');
+  el.innerHTML='<div class="card"><div class="row"><input type="text" id="lgQ" placeholder="'+T('log.filter')+'" style="width:260px"><button class="btn" id="lgF">'+T('log.refresh')+'</button></div><pre class="log" id="lgBox">'+T('log.refresh')+'...</pre></div>';
+  function load(){
+    var q=document.getElementById('lgQ').value.trim();
+    var u='/api/logs?n=300'+(q?'&q='+encodeURIComponent(q):'');
+    api(u).then(function(d){if(d&&d.ok)document.getElementById('lgBox').textContent=d.logs.join('\n')||'(empty)';}).catch(function(){});
+  }
+  document.getElementById('lgF').onclick=load;load();
+}
+
+/* network settings */
+function pageNetwork(){
+  var el=document.getElementById('content');
+  el.innerHTML=
+   '<div class="card"><h3><span class="bar"></span>'+T('nav.network')+'</h3><div class="msg" id="ntMsg"></div>'
+   +'<div class="row"><label class="lbl">'+T('net.hostname')+'</label><input type="text" id="ntHost" style="flex:1;max-width:340px"><div class="hint">'+T('net.hostHint')+'</div></div>'
+   +'<div class="row"><label class="lbl">'+T('net.iface')+'</label><select id="ntIface"><option value="">'+T('net.allIface')+'</option></select></div>'
+   +'<div class="row"><label class="lbl">'+T('net.proto')+'</label>'
+   +'<label class="radio"><input type="radio" name="ntProto" value="udp"> UDP</label><label class="radio"><input type="radio" name="ntProto" value="tcp"> TCP</label><label class="radio"><input type="radio" name="ntProto" value="both"> '+T('net.both')+'</label></div>'
+   +'<div class="row"><label class="lbl">'+T('net.port')+'</label><input type="text" id="ntPort" style="width:120px"></div>'
+   +'<div class="row"><label class="lbl">'+T('net.daemons')+'</label><input type="text" id="ntDaemons" style="width:90px" value="1"><span class="hint" id="ntCpu" style="color:var(--muted);font-size:12px"></span></div>'
+   +'<div class="row"><label class="lbl">'+T('net.dns')+'</label><input type="text" id="ntDns" style="flex:1;max-width:340px"></div>'
+   +'<div class="row"><label class="lbl">'+T('net.instances')+'</label><span class="mono" id="ntInst" style="font-size:13px">-</span></div>'
+   +'<button class="btn primary" id="ntSave">'+T('net.save')+'</button></div>';
+  document.getElementById('ntSave').onclick=function(){
+    var p=document.querySelector('input[name=ntProto]:checked');
+    var dm=document.getElementById('ntDaemons').value.trim();
+    if(p&&p.value==='both'&&(+dm)<2){dm='2';document.getElementById('ntDaemons').value='2';}
+    api('/api/server-settings','POST',{hostname:document.getElementById('ntHost').value.trim(),
+      local:document.getElementById('ntIface').value,proto:p?p.value:'udp',
+      port:document.getElementById('ntPort').value.trim(),daemons:dm,
+      dns:document.getElementById('ntDns').value}).then(function(d){
+        showMsg('ntMsg',!!(d&&d.ok),d&&d.ok?T('net.saved'):T('msg.err')+(d&&d.error||''));
+        if(d&&d.ok)pageNetwork();
+      });
+  };
+  api('/api/server-settings').then(function(d){
+    if(!d||!d.ok)return;var s=d.settings;
+    document.getElementById('ntHost').value=s.hostname||'';
+    var sel=document.getElementById('ntIface');
+    (s.interfaces||[]).forEach(function(it){var o=document.createElement('option');o.value=it.ip;o.text=it.iface+' ('+it.ip+')';sel.appendChild(o);});
+    sel.value=s.local||'';
+    var r=document.querySelector('input[name=ntProto][value="'+s.proto+'"]');if(r)r.checked=true;
+    document.getElementById('ntPort').value=s.port;
+    document.getElementById('ntDaemons').value=s.daemons;
+    document.getElementById('ntCpu').textContent=T('net.cpuHint').replace('{n}',s.cpu_count);
+    document.getElementById('ntDns').value=(s.dns||[]).join(', ');
+    document.getElementById('ntInst').innerHTML=(s.instances||[]).map(function(it){
+      return it.name+' · '+it.proto.toUpperCase()+' '+it.port+' · '+(it.active?'<span class="badge green">'+T('st.run')+'</span>':'<span class="badge red">'+T('st.stop')+'</span>');
+    }).join(' &nbsp; ')||'-';
+  }).catch(function(){});
+}
+
+/* vpn settings */
+function pageVpn(){
+  var el=document.getElementById('content');
+  el.innerHTML='<div class="card"><h3><span class="bar"></span>'+T('nav.vpn')+'</h3><div class="msg" id="vpMsg"></div>'
+   +'<div class="row"><label class="lbl">'+T('vpn.mode')+'</label><span class="mono" id="vpMode" style="font-size:13px">3 (routing/NAT)</span></div>'
+   +'<div class="row"><label class="lbl">'+T('vpn.cipher')+'</label><select id="vpCipher"><option>AES-256-GCM</option><option>AES-128-GCM</option><option>CHACHA20-POLY1305</option></select></div>'
+   +'<div class="row"><label class="lbl">'+T('vpn.auth')+'</label><select id="vpAuth"><option>SHA256</option><option>SHA512</option><option>SHA1</option></select></div>'
+   +'<div class="row"><label class="lbl">'+T('vpn.redirect')+'</label><label class="switch"><input type="checkbox" id="vpRedirect"><span class="sl"></span></label></div>'
+   +'<button class="btn primary" id="vpSave">'+T('save')+'</button></div>';
+  api('/api/vpn-settings').then(function(d){
+    if(!d||!d.ok)return;var s=d.settings;
+    document.getElementById('vpCipher').value=s.cipher;
+    document.getElementById('vpAuth').value=s.auth;
+    document.getElementById('vpRedirect').checked=!!s.redirect;
+  }).catch(function(){});
+  document.getElementById('vpSave').onclick=function(){
+    api('/api/vpn-settings','POST',{cipher:document.getElementById('vpCipher').value,
+      auth:document.getElementById('vpAuth').value,redirect:document.getElementById('vpRedirect').checked}).then(function(d){
+        showMsg('vpMsg',!!(d&&d.ok),d&&d.ok?T('net.saved'):T('msg.err')+(d&&d.error||''));
+      });
+  };
+}
+
+/* web admin */
+function pageWebadmin(){
+  var el=document.getElementById('content');
+  el.innerHTML='<div class="card"><h3><span class="bar"></span>'+T('wa.title')+'</h3><div class="msg" id="waMsg"></div>'
+   +'<div class="row"><label class="lbl">'+T('wa.user')+'</label><input type="text" id="waUser" value="admin" disabled style="width:160px;background:#f2f4f7"></div>'
+   +'<div class="row"><label class="lbl">'+T('wa.newpass')+'</label><input type="password" id="waPass" style="width:220px"></div>'
+   +'<button class="btn primary" id="waSave">'+T('wa.save')+'</button></div>';
+  document.getElementById('waSave').onclick=function(){
+    api('/api/webadmin','POST',{password:document.getElementById('waPass').value}).then(function(d){
+      showMsg('waMsg',!!(d&&d.ok),d&&d.ok?T('wa.ok'):T('msg.err')+(d&&d.error||''));
+      if(d&&d.ok){localStorage.removeItem('ovpn_auth');auth='';showLogin();}
+    });
+  };
+}
+
+/* service servers */
+function pageServers(){
+  var el=document.getElementById('content');
+  el.innerHTML='<div class="card"><h3><span class="bar"></span>'+T('nav.servers')+'</h3><div class="msg" id="svMsg"></div>'
+   +'<table class="tbl" id="svTbl"></table><div class="empty" id="svEmpty" style="display:none">-</div></div>'
+   +'<div class="card"><h3><span class="bar"></span>'+T('srv.addbtn')+'</h3>'
+   +'<div class="row"><label class="lbl">'+T('srv.port')+'</label><input type="text" id="svPort" style="width:110px" placeholder="e.g. 1195"></div>'
+   +'<div class="row"><label class="lbl">'+T('srv.subnet')+'</label><input type="text" id="svSubnet" style="width:280px" value="10.9.0.0 255.255.255.0"></div>'
+   +'<button class="btn primary" id="svAdd">'+T('srv.add')+'</button></div>';
+  function load(){
+    api('/api/server-settings').then(function(d){
+      if(!d||!d.ok)return;var its=d.settings.instances||[];
+      var tb=document.getElementById('svTbl');
+      if(!its.length){tb.innerHTML='';document.getElementById('svEmpty').style.display='block';return;}
+      document.getElementById('svEmpty').style.display='none';
+      tb.innerHTML='<tr><th>Instance</th><th>'+T('net.proto')+'</th><th>'+T('net.port')+'</th><th>Subnet</th><th>Status</th><th></th></tr>';
+      its.forEach(function(it){
+        tb.innerHTML+='<tr><td class="mono">'+it.name+'</td><td>'+it.proto.toUpperCase()+'</td><td class="mono">'+it.port+'</td><td class="mono">'+esc(it.server||'-')+'</td>'
+          +'<td>'+(it.active?'<span class="badge green">'+T('st.run')+'</span>':'<span class="badge red">'+T('st.stop')+'</span>')+'</td>'
+          +'<td>'+(it.name!=='server'?'<button class="btn small danger" data-rm="'+it.name+'">'+T('srv.remove')+'</button>':'')+'</td></tr>';
+      });
+      tb.querySelectorAll('[data-rm]').forEach(function(b){
+        b.onclick=function(){api('/api/servers','POST',{action:'remove',name:b.dataset.rm}).then(function(d){showMsg('svMsg',!!(d&&d.ok),d&&d.ok?T('msg.ok'):T('msg.err')+(d&&d.error||''));pageServers();});};
+      });
+    }).catch(function(){});
+  }
+  document.getElementById('svAdd').onclick=function(){
+    api('/api/servers','POST',{action:'add',port:document.getElementById('svPort').value.trim(),
+      subnet:document.getElementById('svSubnet').value.trim()}).then(function(d){
+        showMsg('svMsg',!!(d&&d.ok),d&&d.ok?T('msg.ok'):T('msg.err')+(d&&d.error||''));
+        if(d&&d.ok)pageServers();
+      });
+  };
+  load();
+}
+
+/* backup */
+function pageBackup(){
+  var el=document.getElementById('content');
+  el.innerHTML='<div class="card"><h3><span class="bar"></span>'+T('bk.title')+'</h3><div class="msg" id="bkMsg"></div>'
+   +'<p style="margin-bottom:14px;color:var(--muted);font-size:13px">'+T('bk.exportSub')+'</p>'
+   +'<button class="btn primary" id="bkExp">'+T('bk.export')+'</button>'
+   +'<p style="margin-top:18px;color:var(--muted);font-size:12px">'+T('bk.restore')+'</p></div>';
+  document.getElementById('bkExp').onclick=function(){
+    var a=document.createElement('a');
+    fetch('/api/backup',{headers:{'Authorization':auth}}).then(function(r){return r.blob();}).then(function(b){
+      a.href=URL.createObjectURL(b);a.download='ovpn-backup.tar.gz';a.click();
+    });
+  };
+}
+
+/* accounts */
+function pageAccounts(){
+  var el=document.getElementById('content');
+  el.innerHTML='<div class="card"><h3><span class="bar"></span>'+T('nav.accounts')+'</h3><div class="msg" id="acMsg"></div>'
+   +'<div class="row"><input type="text" id="acName" placeholder="'+T('ac.name')+'" style="width:200px"><button class="btn primary" id="acAdd">'+T('ac.add')+'</button></div>'
+   +'<table class="tbl" id="acTbl"></table><div class="empty" id="acEmpty" style="display:none">-</div></div>';
+  document.getElementById('acAdd').onclick=function(){
+    var n=document.getElementById('acName').value.trim();
+    api('/api/users','POST',{name:n}).then(function(d){
+      showMsg('acMsg',!!(d&&d.ok),d&&d.ok?('✓ '+n):T('msg.err')+(d&&d.error||''));pageAccounts();
+    });
+  };
+  api('/api/users').then(function(d){
+    if(!d||!d.ok)return;var us=d.users;
+    var tb=document.getElementById('acTbl');
+    if(!us.length){tb.innerHTML='';document.getElementById('acEmpty').style.display='block';return;}
+    document.getElementById('acEmpty').style.display='none';
+    tb.innerHTML='<tr><th>'+T('ac.name')+'</th><th>'+T('ac.status')+'</th><th>'+T('ac.group')+'</th><th>'+T('ac.expiry')+'</th><th>'+T('ac.op')+'</th></tr>';
+    us.forEach(function(u){
+      var st=u.status==='V'?'<span class="badge green">'+T('active')+'</span>':'<span class="badge red">'+T('denied')+'</span>';
+      tb.innerHTML+='<tr><td><b>'+esc(u.name)+'</b>'+(u.online?' <span class="badge gray">'+T('now')+'</span>':'')+'</td>'
+        +'<td>'+st+'</td><td>'+esc(u.group||'-')+'</td><td class="mono">'+esc(u.expiry)+'</td>'
+        +'<td>'+(u.status==='V'?'<a href="/api/download/'+u.name+'" download>'+T('ac.dl')+'</a> · ':'')+'<a href="#" data-set="'+u.name+'">'+T('ac.set')+'</a> · '
+        +(u.status==='V'?'<a href="#" class="xact" data-dy="'+u.name+'">'+T('ac.disable')+'</a>':'<a href="#" class="xact" data-re="'+u.name+'">'+T('ac.enable')+'</a>')
+        +(u.status==='R'?' · <a href="#" class="xact" data-rm="'+u.name+'">'+T('ac.delete')+'</a>':'')+'</td></tr>';
+    });
+    tb.querySelectorAll('[data-set]').forEach(function(a){
+      a.onclick=function(){openUserDetail(a.dataset.set);return false;};
+    });
+    tb.querySelectorAll('[data-dy]').forEach(function(a){
+      a.onclick=function(){if(!confirm(T('ac.confirmX').replace('{name}',a.dataset.dy)))return false;
+        api('/api/users/'+a.dataset.dy,'DELETE').then(function(){pageAccounts();});return false;};
+    });
+    tb.querySelectorAll('[data-re]').forEach(function(a){
+      a.onclick=function(){/* revoke 后再重建 = 重新签发，简化用 meta 禁用展示 */
+        return false;};
+    });
+    tb.querySelectorAll('[data-rm]').forEach(function(a){
+      a.onclick=function(){if(!confirm(T('ac.confirmD').replace('{name}',a.dataset.rm)))return false;
+        api('/api/users/'+a.dataset.rm+'/remove','DELETE').then(function(){pageAccounts();});return false;};
+    });
+  }).catch(function(){});
+}
+
+/* user detail modal */
+function openUserDetail(name){
+  var m=document.createElement('div');m.id='udMask';m.style.cssText='position:fixed;inset:0;background:rgba(16,32,52,.55);display:flex;align-items:center;justify-content:center;z-index:99;';
+  m.innerHTML='<div style="background:#fff;border-radius:12px;padding:26px 30px;width:440px;max-height:88vh;overflow-y:auto;">'
+   +'<h3 style="font-size:16px;color:var(--side);margin-bottom:4px">'+name+'</h3><div style="font-size:12px;color:var(--muted);margin-bottom:14px">'+T('ac.set')+'</div>'
+   +'<div class="msg" id="udMsg"></div>'
+   +'<label style="font-size:12px;color:#5b6c80;font-weight:600;display:block;margin:10px 0 4px">'+T('ac.group')+'</label><select id="udGroup" style="width:100%"></select>'
+   +'<label style="font-size:12px;color:#5b6c80;font-weight:600;display:block;margin:10px 0 4px">Static IP</label>'
+   +'<div style="display:flex;gap:14px;margin-bottom:8px"><label class="radio"><input type="radio" name="udMode" value="dynamic"> Dynamic</label><label class="radio"><input type="radio" name="udMode" value="static"> Static</label></div>'
+   +'<input type="text" id="udIp" placeholder="10.8.0.101" style="width:100%;display:none">'
+   +'<label style="font-size:12px;color:#5b6c80;font-weight:600;display:block;margin:10px 0 4px">Routes (CIDR, comma)</label><textarea id="udRoutes" rows="2" style="width:100%;border:1px solid var(--line);border-radius:6px;padding:8px"></textarea>'
+   +'<div style="display:flex;gap:10px;margin-top:18px"><button class="btn primary" style="flex:1" id="udSave">'+T('save')+'</button><button class="btn" style="flex:1" id="udClose">'+T('cancel')+'</button></div></div>';
+  document.body.appendChild(m);
+  document.getElementById('udClose').onclick=function(){document.body.removeChild(m);};
+  function fillGroups(groups){
+    var sel=document.getElementById('udGroup');sel.innerHTML='<option value="">-</option>';
+    Object.keys(groups||{}).forEach(function(g){var o=document.createElement('option');o.value=g;o.text=g;sel.appendChild(o);});
+  }
+  api('/api/groups').then(function(d){if(d&&d.ok)fillGroups(d.groups);}).catch(function(){});
+  api('/api/user/'+name).then(function(d){
+    if(!d||!d.ok)return;var u=d.user;
+    var sel=document.getElementById('udGroup');sel.value=u.group||'';
+    var md=u.static_ip?'static':'dynamic';
+    var r=document.querySelector('input[name=udMode][value="'+md+'"]');if(r)r.checked=true;
+    document.getElementById('udIp').style.display=md==='static'?'block':'none';
+    if(u.static_ip)document.getElementById('udIp').value=u.static_ip;
+    document.getElementById('udRoutes').value=(u.routes||[]).join(', ');
+  }).catch(function(){});
+  document.querySelectorAll('input[name=udMode]').forEach(function(r){
+    r.onchange=function(){document.getElementById('udIp').style.display=r.value==='static'?'block':'none';};
+  });
+  document.getElementById('udSave').onclick=function(){
+    var md=document.querySelector('input[name=udMode]:checked');
+    var ip=md&&md.value==='static'?document.getElementById('udIp').value.trim():'';
+    var g=document.getElementById('udGroup').value;
+    api('/api/user/'+name+'/settings','POST',{static_ip:ip,routes:document.getElementById('udRoutes').value}).then(function(d){
+      if(d&&d.ok)api('/api/users/'+name+'/meta','POST',{group:g}).then(function(){
+        document.body.removeChild(m);pageAccounts();
+      });
+      else showMsg('udMsg',false,T('msg.err')+(d&&d.error||''));
+    });
+  };
+}
+
+/* groups */
+function pageGroups(){
+  var el=document.getElementById('content');
+  el.innerHTML='<div class="card"><h3><span class="bar"></span>'+T('nav.groups')+'</h3><div class="msg" id="gpMsg"></div>'
+   +'<div class="hint" style="margin-bottom:14px">'+T('gp.note')+'</div>'
+   +'<div class="row"><label class="lbl">'+T('gp.name')+'</label><input type="text" id="gpName" style="width:160px"></div>'
+   +'<div class="row"><label class="lbl">'+T('gp.desc')+'</label><input type="text" id="gpDesc" style="flex:1;max-width:300px"></div>'
+   +'<div class="row"><label class="lbl">'+T('gp.networks')+'</label><input type="text" id="gpNets" placeholder="192.168.0.0/24" style="flex:1;max-width:300px"></div>'
+   +'<div class="row"><label class="lbl">'+T('gp.bw')+'</label><input type="text" id="gpBw" placeholder="e.g. 10 Mbps" style="width:140px"></div>'
+   +'<button class="btn primary" id="gpSave">'+T('gp.save')+'</button></div>'
+   +'<div class="card"><h3><span class="bar"></span>List</h3><table class="tbl" id="gpTbl"></table><div class="empty" id="gpEmpty" style="display:none">-</div></div>';
+  function load(){
+    api('/api/groups').then(function(d){
+      if(!d||!d.ok)return;var gs=d.groups;var tb=document.getElementById('gpTbl');
+      var names=Object.keys(gs);
+      if(!names.length){tb.innerHTML='';document.getElementById('gpEmpty').style.display='block';return;}
+      document.getElementById('gpEmpty').style.display='none';
+      tb.innerHTML='<tr><th>'+T('gp.name')+'</th><th>'+T('gp.desc')+'</th><th>'+T('gp.networks')+'</th><th>'+T('gp.bw')+'</th><th></th></tr>';
+      names.forEach(function(n){
+        var g=gs[n];
+        tb.innerHTML+='<tr><td><b>'+esc(n)+'</b></td><td>'+esc(g.desc||'-')+'</td><td class="mono">'+esc((g.networks||[]).join(', ')||'-')+'</td><td>'+esc(g.bandwidth||'-')+'</td>'
+          +'<td><button class="btn small danger" data-g="'+esc(n)+'">'+T('gp.del')+'</button></td></tr>';
+      });
+      tb.querySelectorAll('[data-g]').forEach(function(b){
+        b.onclick=function(){api('/api/groups','POST',{action:'delete',name:b.dataset.g}).then(function(){pageGroups();});};
+      });
+    }).catch(function(){});
+  }
+  document.getElementById('gpSave').onclick=function(){
+    api('/api/groups','POST',{name:document.getElementById('gpName').value.trim(),
+      desc:document.getElementById('gpDesc').value,networks:document.getElementById('gpNets').value,
+      bandwidth:document.getElementById('gpBw').value}).then(function(d){
+        showMsg('gpMsg',!!(d&&d.ok),d&&d.ok?T('msg.ok'):T('msg.err')+(d&&d.error||''));pageGroups();
+      });
+  };
+  load();
+}
+
+/* auth */
+function pageAuth(){
+  var el=document.getElementById('content');
+  el.innerHTML='<div class="card"><h3><span class="bar"></span>'+T('nav.auth')+'</h3><div class="msg" id="auMsg"></div>'
+   +'<div class="hint" style="margin-bottom:12px">'+T('au.note')+'</div>'
+   +'<div class="row"><label class="lbl">'+T('au.method')+'</label>'
+   +['local','pam','radius','ldap','saml'].map(function(m){return '<label class="radio"><input type="radio" name="auM" value="'+m+'"> '+T('au.'+m)+'</label>';}).join('')+'</div>'
+   +'<div id="auExtra"></div>'
+   +'<button class="btn primary" id="auSave">'+T('au.save')+'</button></div>';
+  api('/api/auth-settings').then(function(d){
+    if(!d||!d.ok)return;var a=d.auth;
+    var r=document.querySelector('input[name=auM][value="'+a.method+'"]');if(r)r.checked=true;
+    renderExtra(a);
+  }).catch(function(){});
+  document.querySelectorAll('input[name=auM]').forEach(function(r){
+    r.onchange=function(){renderExtra({method:r.value});};
+  });
+  function renderExtra(a){
+    var box=document.getElementById('auExtra');var h='';
+    if(a.method==='radius'){
+      h+='<div class="row"><label class="lbl">'+T('au.rh')+'</label><input type="text" id="auRH" value="'+esc(a.radius_host||'')+'" style="width:240px"></div>'
+        +'<div class="row"><label class="lbl">'+T('au.rs')+'</label><input type="text" id="auRS" value="'+esc(a.radius_secret||'')+'" style="width:240px"></div>'
+        +'<div class="row"><label class="lbl">'+T('au.rp')+'</label><input type="text" id="auRP" value="'+esc(a.radius_port||'1812')+'" style="width:120px"></div>';
+    } else if(a.method==='ldap'){
+      h+='<div class="row"><label class="lbl">'+T('au.lh')+'</label><input type="text" id="auLH" value="'+esc(a.ldap_host||'')+'" style="width:240px"></div>'
+        +'<div class="row"><label class="lbl">'+T('au.lb')+'</label><input type="text" id="auLB" value="'+esc(a.ldap_bind||'')+'" style="width:240px"></div>'
+        +'<div class="row"><label class="lbl">'+T('au.lbase')+'</label><input type="text" id="auLB2" value="'+esc(a.ldap_base||'')+'" style="width:240px"></div>';
+    } else if(a.method==='saml'){
+      h+='<div class="row"><label class="lbl">'+T('au.sh')+'</label><input type="text" id="auSH" value="'+esc(a.saml_idp||'')+'" style="flex:1;max-width:340px"></div>'
+        +'<div class="row"><label class="lbl">'+T('au.se')+'</label><input type="text" id="auSE" value="'+esc(a.saml_entity||'')+'" style="flex:1;max-width:340px"></div>';
+    }
+    box.innerHTML=h;
+  }
+  document.getElementById('auSave').onclick=function(){
+    var m=document.querySelector('input[name=auM]:checked');if(!m)return;
+    var body={method:m.value};
+    ['RH','RS','RP','LH','LB','LB2','SH','SE'].forEach(function(k){
+      var e=document.getElementById('au'+k);if(e)body[(k==='RH'?'radius_host':k==='RS'?'radius_secret':k==='RP'?'radius_port':k==='LH'?'ldap_host':k==='LB'?'ldap_bind':k==='LB2'?'ldap_base':k==='SH'?'saml_idp':'saml_entity')]=e.value;
+    });
+    api('/api/auth-settings','POST',body).then(function(d){
+      showMsg('auMsg',!!(d&&d.ok),d&&d.ok?T('msg.ok'):T('msg.err')+(d&&d.error||''));
+    });
+  };
+}
+
+/* export */
+function pageExport(){
+  var el=document.getElementById('content');
+  el.innerHTML='<div class="card"><h3><span class="bar"></span>'+T('nav.export')+'</h3>'
+   +'<div class="hint" style="margin-bottom:14px">'+T('ex.note')+'</div>'
+   +'<div class="row"><label class="lbl">'+T('ex.user')+'</label><select id="exUser" style="min-width:200px"></select>'
+   +'<button class="btn primary" id="exDl">'+T('ex.dl')+'</button></div></div>';
+  api('/api/users').then(function(d){
+    if(!d||!d.ok)return;var sel=document.getElementById('exUser');
+    d.users.filter(function(u){return u.status==='V';}).forEach(function(u){
+      var o=document.createElement('option');o.value=u.name;o.text=u.name;sel.appendChild(o);
+    });
+  }).catch(function(){});
+  document.getElementById('exDl').onclick=function(){
+    var n=document.getElementById('exUser').value;if(n)window.open('/api/download/'+n,'_blank');
+  };
+}
+
+/* client settings */
+function pageClientset(){
+  var el=document.getElementById('content');
+  el.innerHTML='<div class="card"><h3><span class="bar"></span>'+T('nav.clientset')+'</h3>'
+   +'<div class="kv">'
+   +'<div class="r"><b>'+T('cs.dns')+'</b><span id="csDns">-</span></div>'
+   +'<div class="r"><b>'+T('cs.redirect')+'</b><span id="csRd">-</span></div>'
+   +'</div><div class="hint" style="margin-top:10px">'+T('cs.note')+'</div></div>';
+  api('/api/server-settings').then(function(d){
+    if(d&&d.ok)document.getElementById('csDns').textContent=(d.settings.dns||[]).join(', ')||'-';
+  }).catch(function(){});
+  api('/api/vpn-settings').then(function(d){
+    if(d&&d.ok)document.getElementById('csRd').textContent=d.settings.redirect?T('ov.on'):T('ov.off');
+  }).catch(function(){});
+}
+
+/* certs */
+function pageCerts(){
+  var el=document.getElementById('content');
+  el.innerHTML='<div class="card"><h3><span class="bar"></span>'+T('ce.certs')+'</h3>'
+   +'<table class="tbl" id="ceTbl"></table><div class="empty" id="ceEmpty" style="display:none">-</div></div>';
+  api('/api/ca').then(function(d){
+    if(!d||!d.ok)return;var cs=d.certs;var tb=document.getElementById('ceTbl');
+    if(!cs.length){tb.innerHTML='';document.getElementById('ceEmpty').style.display='block';return;}
+    document.getElementById('ceEmpty').style.display='none';
+    tb.innerHTML='<tr><th>'+T('ce.name')+'</th><th>'+T('ce.state')+'</th><th>'+T('ce.exp')+'</th></tr>';
+    cs.forEach(function(c){
+      tb.innerHTML+='<tr><td>'+esc(c.name)+'</td><td>'+(c.status==='V'?'<span class="badge green">'+T('active')+'</span>':'<span class="badge red">'+T('denied')+'</span>')+'</td><td class="mono">'+esc(c.expiry)+'</td></tr>';
+    });
+  }).catch(function(){});
+}
+
+/* debug */
+function pageDebug(){
+  var el=document.getElementById('content');
+  el.innerHTML='<div class="card"><h3><span class="bar"></span>'+T('db.services')+'</h3><div id="dbSvc"></div></div>'
+   +'<div class="card"><h3><span class="bar"></span>'+T('db.routes')+'</h3><pre class="log" id="dbRt" style="max-height:180px"></pre></div>'
+   +'<div class="card"><h3><span class="bar"></span>'+T('db.tail')+'</h3><div class="row"><button class="btn" id="dbRf">'+T('db.refresh')+'</button></div><pre class="log" id="dbTail"></pre></div>';
+  function load(){
+    api('/api/debug').then(function(d){
+      if(!d||!d.ok)return;
+      var sv=Object.keys(d.services).map(function(k){
+        return '<span style="margin-right:16px;font-size:13px">'+esc(k)+' '+(d.services[k]?'<span class="badge green">'+T('st.run')+'</span>':'<span class="badge red">'+T('st.stop')+'</span>')+'</span>';
+      }).join('');
+      document.getElementById('dbSvc').innerHTML=sv;
+      document.getElementById('dbRt').textContent=d.routes||'';
+      document.getElementById('dbTail').textContent=d.tail.join('\n')||'-';
+    }).catch(function(){});
+  }
+  document.getElementById('dbRf').onclick=load;load();
+}
+
+/* monitor */
+var monHist={cpu:[],mem:[],conn:[]};
+function pageMonitor(){
+  var el=document.getElementById('content');
+  el.innerHTML='<div class="card"><h3><span class="bar"></span>'+T('mo.title')+'</h3>'
+   +'<div class="row" id="moLegend"><label class="radio"><input type="radio" name="moK" value="cpu" checked> '+T('mo.cpu')+' (%)</label>'
+   +'<label class="radio"><input type="radio" name="moK" value="mem"> '+T('mo.mem')+' (%)</label>'
+   +'<label class="radio"><input type="radio" name="moK" value="conn"> '+T('mo.conn')+'</label>'
+   +'<button class="btn" id="moRf">'+T('db.refresh')+'</button></div>'
+   +'<canvas id="monCanvas"></canvas>'
+   +'<div style="margin-top:8px;font-size:12px;color:var(--muted)" id="moNet">'+T('mo.net')+': -</div></div>';
+  var timer=null;
+  function sample(){
+    api('/api/monitor').then(function(d){
+      if(!d||!d.ok)return;
+      var m=d.monitor;
+      monHist.cpu.push(m.cpu);if(monHist.cpu.length>40)monHist.cpu.shift();
+      monHist.mem.push(m.mem);if(monHist.mem.length>40)monHist.mem.shift();
+      monHist.conn.push(m.connections);if(monHist.conn.length>40)monHist.conn.shift();
+      var net=Object.keys(m.net||{}).map(function(k){return k+': ↓'+m.net[k].rx+' ↑'+m.net[k].tx+' KB/s';}).join(' &nbsp; ');
+      document.getElementById('moNet').innerHTML=T('mo.net')+': '+(net||'-');
+      draw();
+    }).catch(function(){});
+  }
+  function draw(){
+    var k=document.querySelector('input[name=moK]:checked');if(!k)return;
+    var key=k.value;var cv=document.getElementById('monCanvas');if(!cv)return;
+    var ctx=cv.getContext('2d');var W=cv.width=cv.clientWidth*2,H=cv.height=260*2;
+    ctx.clearRect(0,0,W,H);
+    var data=monHist[key];if(data.length<2)return;
+    var max=Math.max.apply(null,data)*1.1||1;
+    ctx.strokeStyle='#e67e22';ctx.lineWidth=2;ctx.beginPath();
+    data.forEach(function(v,i){
+      var x=i/(39)*(W-20)+10, y=H-10-(v/max)*(H-40);
+      i?ctx.lineTo(x,y):ctx.moveTo(x,y);
+    });
+    ctx.stroke();
+    ctx.fillStyle='#5b6c80';ctx.font='12px sans-serif';
+    ctx.fillText((key==='cpu'?T('mo.cpu'):key==='mem'?T('mo.mem'):T('mo.conn'))+' 当前: '+data[data.length-1]+(key==='conn'?'':'%'),10,20);
+    ctx.strokeStyle='#dde3ea';ctx.beginPath();ctx.moveTo(10,H-10);ctx.lineTo(W-10,H-10);ctx.stroke();
+  }
+  document.querySelectorAll('input[name=moK]').forEach(function(r){r.onchange=draw;});
+  document.getElementById('moRf').onclick=function(){clearInterval(timer);sample();timer=setInterval(sample,3000);};
+  sample();timer=setInterval(sample,3000);
+  window.addEventListener('beforeunload',function(){if(timer)clearInterval(timer);});
+}
+
+/* doc & support */
+function pageDoc(){
+  var el=document.getElementById('content');
+  el.innerHTML='<div class="card"><h3><span class="bar"></span>'+T('doc.c1')+'</h3><p style="font-size:13px">'+T('doc.c1b')+'</p></div>'
+   +'<div class="card"><h3><span class="bar"></span>'+T('doc.c2')+'</h3><p style="font-size:13px">'+T('doc.c2b')+'</p></div>'
+   +'<div class="card"><h3><span class="bar"></span>'+T('doc.c3')+'</h3><p style="font-size:13px">'+T('doc.c3b')+'</p></div>'
+   +'<div class="card"><h3><span class="bar"></span>'+T('doc.c4')+'</h3><p style="font-size:13px">'+T('doc.c4b')+'</p></div>';
+}
+function pageSupport(){
+  api('/api/status').then(function(d){
+    var ver=d&&d.ok?d.version:'-';
+    var el=document.getElementById('content');
+    el.innerHTML='<div class="card"><h3><span class="bar"></span>'+T('sup.title')+'</h3><div class="kv">'
+     +'<div class="r"><b>'+T('sup.ver')+'</b><span class="mono">'+esc(ver)+'</span></div>'
+     +'<div class="r"><b>'+T('sup.license')+'</b><span>Community / 自研面板</span></div>'
+     +'<div class="r"><b>'+T('sup.contact')+'</b><span>admin@example.com</span></div></div></div>';
+  }).catch(function(){});
+}
+
+/* ===== 启动 ===== */
+function loadApp(){
+  buildMenu();
+  document.getElementById('langBtn').textContent=T('lang');
+  document.getElementById('outBtn').onclick=function(){localStorage.removeItem('ovpn_auth');auth='';showLogin();};
+  document.getElementById('sideFoot').textContent='OpenVPN Access Server';
+  // 尝试带认证加载
+  fetch('/api/overview',{headers:{'Authorization':auth}}).then(function(r){
+    if(r.status===200){document.getElementById('loginView').className='';switchPage('overview');}
+    else showLogin();
+  }).catch(function(){showLogin();});
+}
+/* 已有登录态直接进 */
+(function(){ if(auth){loadApp();} else {showLogin();} })();
+</script>
+</body>
+</html>
